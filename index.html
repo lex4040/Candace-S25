@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Candace — Daily Habit Sheet</title>
+  <meta
+    name="description"
+    content="Candace is an offline daily habit sheet customized for Samsung Galaxy S25 Ultra with live search, filtering, streaks, and daily notes."
+  />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" id="theme-color-meta" content="#f4f1ea" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <div class="brand-group">
+        <img src="./icon-192.png" alt="Candace app icon" class="brand-icon" width="34" height="34" />
+        <h1 class="app-title">Candace</h1>
+        <span class="app-tagline">Daily Habit Sheet</span>
+      </div>
+      <div class="top-actions">
+        <button
+          id="theme-toggle"
+          type="button"
+          class="btn btn-ghost btn-icon"
+          aria-label="Toggle color theme"
+          title="Toggle color theme"
+        >
+          <svg id="theme-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+          </svg>
+        </button>
+        <button id="add-habit-btn" type="button" class="btn btn-primary">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          New Habit
+        </button>
+      </div>
+    </header>
+
+    <!-- One-Tap Android Install Banner (appears automatically on Chrome / Samsung Internet before install) -->
+    <aside id="android-install-banner" class="install-banner" hidden aria-label="Install Candace app">
+      <span>Install Candace as an offline app.</span>
+      <div class="install-banner-actions">
+        <button id="install-app-btn" type="button" class="btn btn-primary btn-compact">Install</button>
+        <button id="dismiss-install-btn" type="button" class="install-dismiss" aria-label="Dismiss">&times;</button>
+      </div>
+    </aside>
+
+    <!-- Unified Daily Sheet -->
+    <main class="daily-sheet" aria-label="Daily habit sheet">
+      <!-- Sheet Masthead: Swipeable Date Switcher + Daily Progress -->
+      <section class="sheet-masthead" aria-label="Active day sheet header">
+        <div class="masthead-top">
+          <div class="day-switcher">
+            <button id="prev-day-btn" type="button" class="nav-day-btn" aria-label="Previous day" title="Previous day">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+            <div class="day-heading-wrap">
+              <h2 id="sheet-date-heading" class="day-heading">Today</h2>
+              <span id="today-badge" class="today-badge">Today</span>
+              <button id="jump-today-btn" type="button" class="jump-today-btn" style="display: none;">Back to today</button>
+            </div>
+            <button id="next-day-btn" type="button" class="nav-day-btn" aria-label="Next day" title="Next day">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="sheet-stats">
+            <span>Done <strong id="summary-completed" class="stat-value">0 / 0</strong></span>
+            <span>Progress <strong id="summary-pct" class="stat-value">0%</strong></span>
+            <span>Best streak <strong id="summary-streak" class="stat-value">0d</strong></span>
+          </div>
+        </div>
+
+        <div id="progress-bar" class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+      </section>
+
+      <!-- Daily Notes Space (Above Habits) -->
+      <section class="sheet-notes" aria-label="Daily notes">
+        <div class="notes-header">
+          <label for="daily-notes" class="notes-label">Daily Notes</label>
+          <span id="notes-status" class="notes-status" aria-live="polite">Saved per day</span>
+        </div>
+        <textarea
+          id="daily-notes"
+          class="notes-textarea"
+          rows="2"
+          placeholder="Write intentions, quick thoughts, or notes for this day..."
+        ></textarea>
+      </section>
+
+      <!-- Live Search & Filtering Controls -->
+      <section class="sheet-controls" aria-label="Search and filter daily habits">
+        <div class="search-row">
+          <div class="search-box">
+            <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <label for="search-input" class="sr-only">Search daily habits</label>
+            <input
+              id="search-input"
+              type="search"
+              class="search-input"
+              placeholder="Search daily habits, cues, time, or category..."
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <kbd id="search-kbd" class="search-kbd" aria-hidden="true">/</kbd>
+            <button id="search-clear" type="button" class="search-clear" aria-label="Clear search">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <label for="time-filter" class="sr-only">Filter by time of day</label>
+          <select id="time-filter" class="select-control" aria-label="Filter by time of day">
+            <option value="all">Any time</option>
+            <option value="Morning">Morning</option>
+            <option value="Afternoon">Afternoon</option>
+            <option value="Evening">Evening</option>
+            <option value="Anytime">Anytime</option>
+          </select>
+
+          <label for="sort-select" class="sr-only">Sort habits</label>
+          <select id="sort-select" class="select-control" aria-label="Sort habits">
+            <option value="sheet">Sort: Sheet order</option>
+            <option value="todo-first">Sort: To do first</option>
+            <option value="time">Sort: Time of day</option>
+            <option value="streak-desc">Sort: Highest streak</option>
+            <option value="name-asc">Sort: Name (A–Z)</option>
+          </select>
+        </div>
+
+        <div class="filter-row">
+          <div id="status-filter" class="segmented" role="group" aria-label="Filter by completion status">
+            <button type="button" class="seg-btn active" data-status="all">All</button>
+            <button type="button" class="seg-btn" data-status="todo">To do</button>
+            <button type="button" class="seg-btn" data-status="done">Done</button>
+          </div>
+
+          <div id="category-pills" class="category-pills" role="group" aria-label="Filter by category"></div>
+        </div>
+
+        <div class="results-strip">
+          <span id="results-summary" aria-live="polite">0 daily habits</span>
+          <button id="reset-filters-btn" type="button" class="reset-filters-btn hidden">Clear filters</button>
+        </div>
+      </section>
+
+      <!-- Sheet Column Headers (Desktop) -->
+      <div class="sheet-columns" aria-hidden="true">
+        <span>Done</span>
+        <span>Daily Habit</span>
+        <span>Time</span>
+        <span>Category</span>
+        <span class="col-right">Streak</span>
+        <span class="col-right">Edit</span>
+      </div>
+
+      <!-- Ruled Sheet Rows -->
+      <div id="sheet-rows" class="sheet-rows"></div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-actions">
+        <button id="export-btn" type="button" class="link-btn">Export JSON</button>
+        <button id="import-btn" type="button" class="link-btn">Import JSON</button>
+        <button id="reset-demo-btn" type="button" class="link-btn">Reset sample sheet</button>
+        <input id="import-file" type="file" accept="application/json" class="sr-only" />
+      </div>
+      <span class="footer-note">Σ’αγαπώ❤️</span>
+    </footer>
+  </div>
+
+  <!-- Add / Edit Habit Modal -->
+  <div id="habit-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="modal-title" class="modal-title">New Daily Habit</h2>
+        <button id="modal-close" type="button" class="row-action-btn" aria-label="Close modal">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <form id="habit-form">
+        <input id="habit-id" type="hidden" />
+
+        <div class="form-group">
+          <label for="habit-name" class="form-label">Daily habit</label>
+          <input
+            id="habit-name"
+            type="text"
+            class="form-input"
+            placeholder="e.g., Morning sunlight walk"
+            maxlength="72"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="habit-note" class="form-label">Cue or note (optional)</label>
+          <input
+            id="habit-note"
+            type="text"
+            class="form-input"
+            placeholder="e.g., 20 minutes outside after coffee"
+            maxlength="120"
+          />
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="habit-time" class="form-label">Time of day</label>
+            <select id="habit-time" class="form-select">
+              <option value="Morning">Morning</option>
+              <option value="Afternoon">Afternoon</option>
+              <option value="Evening">Evening</option>
+              <option value="Anytime">Anytime</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="habit-category" class="form-label">Category</label>
+            <select id="habit-category" class="form-select">
+              <option value="Health">Health</option>
+              <option value="Focus">Focus</option>
+              <option value="Mind">Mind</option>
+              <option value="Craft">Craft</option>
+              <option value="Home">Home</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="modal-cancel" type="button" class="btn btn-ghost">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Habit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Undo Toast -->
+  <div id="toast" class="toast" role="status" aria-live="polite">
+    <span id="toast-message"></span>
+    <button id="toast-action" type="button" class="toast-action">Undo</button>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
