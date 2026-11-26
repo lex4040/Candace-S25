@@ -3,7 +3,9 @@
 
   const STORAGE_KEY = 'candace.s25.habits.v1';
   const NOTES_STORAGE_KEY = 'candace.s25.notes.v1';
+  const CYCLE_STORAGE_KEY = 'candace.s25.cycle.v1';
   const THEME_KEY = 'candace.s25.theme.v1';
+  const MODE_KEY = 'candace.s25.mode.v1';
 
   const CATEGORIES = ['Health', 'Focus', 'Mind', 'Craft', 'Home'];
   const CATEGORY_COLORS = {
@@ -16,6 +18,46 @@
 
   const TIMES_OF_DAY = ['Morning', 'Afternoon', 'Evening', 'Anytime'];
 
+  const FLOW_OPTIONS = [
+    { id: 'spotting', label: 'Spotting', drops: 1, outline: true },
+    { id: 'light', label: 'Light', drops: 1, outline: false },
+    { id: 'medium', label: 'Medium', drops: 2, outline: false },
+    { id: 'heavy', label: 'Heavy', drops: 3, outline: false },
+  ];
+
+  const PERIOD_FLOWS = new Set(['light', 'medium', 'heavy']);
+
+  const BODY_SYMPTOMS = [
+    'Cramps',
+    'Headache',
+    'Bloating',
+    'Backache',
+    'Tenderness',
+    'Fatigue',
+    'Acne',
+    'Nausea',
+  ];
+
+  const MOOD_OPTIONS = [
+    'Calm',
+    'Happy',
+    'Sensitive',
+    'Anxious',
+    'Irritable',
+    'Low energy',
+    'Focused',
+    'Motivated',
+  ];
+
+  const CARE_OPTIONS = [
+    'Rested',
+    'Hydrated',
+    'Warm compress',
+    'Light movement',
+    'Cravings',
+    'Poor sleep',
+  ];
+
   /* ------------------------------------------------------------------------
      Date Helpers (Local timezone safe)
      ------------------------------------------------------------------------ */
@@ -24,6 +66,17 @@
     const m = String(date.getMonth() + 1).padStart(2, '0');
     const d = String(date.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
+  }
+
+  function parseDateKey(key) {
+    const [y, m, d] = key.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  function diffDays(keyA, keyB) {
+    const a = parseDateKey(keyA);
+    const b = parseDateKey(keyB);
+    return Math.round((b - a) / 86400000);
   }
 
   function addDays(date, delta) {
@@ -54,6 +107,11 @@
     });
   }
 
+  function formatShortDate(dateKey) {
+    const d = parseDateKey(dateKey);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
   function hapticTick(ms = 10) {
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
       try {
@@ -65,7 +123,7 @@
   }
 
   /* ------------------------------------------------------------------------
-     Sample Data (Starts Blank — Zero Pre-Recorded Checks) & Local Storage
+     Persistence (Habits, Daily Notes, Cycle Logs)
      ------------------------------------------------------------------------ */
   function buildSampleHabits() {
     return [
@@ -120,6 +178,14 @@
     ];
   }
 
+  function defaultCycleData() {
+    return {
+      cycleLength: 28,
+      periodLength: 5,
+      logs: {},
+    };
+  }
+
   function normalizeHabit(item) {
     if (!item || typeof item.name !== 'string' || !item.name.trim()) return null;
     return {
@@ -132,6 +198,31 @@
         ? Array.from(new Set(item.completions.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))))
         : [],
     };
+  }
+
+  function normalizeCycleData(raw) {
+    const base = defaultCycleData();
+    if (!raw || typeof raw !== 'object') return base;
+    const cl = Number(raw.cycleLength);
+    const pl = Number(raw.periodLength);
+    base.cycleLength = Number.isFinite(cl) ? Math.min(45, Math.max(21, Math.round(cl))) : 28;
+    base.periodLength = Number.isFinite(pl) ? Math.min(10, Math.max(2, Math.round(pl))) : 5;
+    if (raw.logs && typeof raw.logs === 'object' && !Array.isArray(raw.logs)) {
+      for (const [k, v] of Object.entries(raw.logs)) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !v || typeof v !== 'object') continue;
+        const entry = {
+          flow: FLOW_OPTIONS.some((f) => f.id === v.flow) ? v.flow : null,
+          symptoms: Array.isArray(v.symptoms) ? v.symptoms.filter((s) => typeof s === 'string') : [],
+          moods: Array.isArray(v.moods) ? v.moods.filter((m) => typeof m === 'string') : [],
+          care: Array.isArray(v.care) ? v.care.filter((c) => typeof c === 'string') : [],
+          note: typeof v.note === 'string' ? v.note : '',
+        };
+        if (entry.flow || entry.symptoms.length || entry.moods.length || entry.care.length || entry.note.trim()) {
+          base.logs[k] = entry;
+        }
+      }
+    }
+    return base;
   }
 
   function loadHabits() {
@@ -177,6 +268,24 @@
     }
   }
 
+  function loadCycleData() {
+    try {
+      const raw = localStorage.getItem(CYCLE_STORAGE_KEY);
+      if (!raw) return defaultCycleData();
+      return normalizeCycleData(JSON.parse(raw));
+    } catch {
+      return defaultCycleData();
+    }
+  }
+
+  function saveCycleData(data) {
+    try {
+      localStorage.setItem(CYCLE_STORAGE_KEY, JSON.stringify(data));
+    } catch {
+      // Ignore quota errors
+    }
+  }
+
   /* ------------------------------------------------------------------------
      Streak & Safe HTML Highlighting
      ------------------------------------------------------------------------ */
@@ -215,12 +324,174 @@
   }
 
   /* ------------------------------------------------------------------------
-     State & DOM
+     Cycle Analytics & Prediction Engine (Clue / Euki Style)
      ------------------------------------------------------------------------ */
+  function getPeriodEpisodes(cycleData) {
+    const periodKeys = Object.entries(cycleData.logs)
+      .filter(([, entry]) => entry && PERIOD_FLOWS.has(entry.flow))
+      .map(([key]) => key)
+      .sort();
+
+    if (!periodKeys.length) return [];
+
+    const episodes = [];
+    let current = { startKey: periodKeys[0], endKey: periodKeys[0], days: [periodKeys[0]] };
+
+    for (let i = 1; i < periodKeys.length; i += 1) {
+      const k = periodKeys[i];
+      if (diffDays(current.endKey, k) <= 2) {
+        current.endKey = k;
+        current.days.push(k);
+      } else {
+        episodes.push({
+          ...current,
+          length: diffDays(current.startKey, current.endKey) + 1,
+        });
+        current = { startKey: k, endKey: k, days: [k] };
+      }
+    }
+    episodes.push({
+      ...current,
+      length: diffDays(current.startKey, current.endKey) + 1,
+    });
+
+    for (let i = 1; i < episodes.length; i += 1) {
+      episodes[i - 1].cycleLengthAfter = diffDays(episodes[i - 1].startKey, episodes[i].startKey);
+    }
+
+    return episodes;
+  }
+
+  function computeObservedAverageCycle(episodes) {
+    const intervals = episodes
+      .map((ep) => ep.cycleLengthAfter)
+      .filter((n) => typeof n === 'number' && n >= 18 && n <= 60);
+    if (!intervals.length) return null;
+    return Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length);
+  }
+
+  function computeCyclePredictions(cycleData, episodes) {
+    const predictedPeriodKeys = new Set();
+    const fertileKeys = new Set();
+    if (!episodes.length) {
+      return { predictedPeriodKeys, fertileKeys, nextStartKey: null };
+    }
+
+    const latest = episodes[episodes.length - 1];
+    const cl = cycleData.cycleLength;
+    const pl = cycleData.periodLength;
+    const latestStart = parseDateKey(latest.startKey);
+
+    // Current cycle's estimated fertile window
+    const ovOffset = Math.max(8, cl - 14);
+    for (let o = ovOffset - 4; o <= ovOffset + 1; o += 1) {
+      fertileKeys.add(toDateKey(addDays(latestStart, o)));
+    }
+
+    // Project next 4 future cycles for calendar browsing
+    let nextStartKey = null;
+    for (let cycleIdx = 1; cycleIdx <= 4; cycleIdx += 1) {
+      const projStart = addDays(latestStart, cl * cycleIdx);
+      if (cycleIdx === 1) nextStartKey = toDateKey(projStart);
+
+      for (let p = 0; p < pl; p += 1) {
+        predictedPeriodKeys.add(toDateKey(addDays(projStart, p)));
+      }
+      for (let o = ovOffset - 4; o <= ovOffset + 1; o += 1) {
+        fertileKeys.add(toDateKey(addDays(projStart, o)));
+      }
+    }
+
+    return { predictedPeriodKeys, fertileKeys, nextStartKey };
+  }
+
+  function describeCycleStatus(cycleData, episodes, activeKey, nextStartKey) {
+    if (!episodes.length) {
+      return {
+        dayNum: '—',
+        phaseTitle: 'No period logged yet',
+        phaseSub: 'Tap Light, Medium, or Heavy below to start',
+        nextPill: '',
+      };
+    }
+
+    const cl = cycleData.cycleLength;
+    const pl = cycleData.periodLength;
+    const ovDay = Math.max(9, cl - 14 + 1);
+    const activeEntry = cycleData.logs[activeKey];
+    const isLoggedBleeding = activeEntry && PERIOD_FLOWS.has(activeEntry.flow);
+
+    // Find most recent period start on or before activeKey
+    let anchorEp = null;
+    for (let i = episodes.length - 1; i >= 0; i -= 1) {
+      if (episodes[i].startKey <= activeKey) {
+        anchorEp = episodes[i];
+        break;
+      }
+    }
+
+    let nextPill = '';
+    if (nextStartKey) {
+      const daysUntil = diffDays(activeKey, nextStartKey);
+      if (daysUntil > 0) nextPill = `Next in ${daysUntil}d`;
+      else if (daysUntil === 0) nextPill = 'Expected today';
+      else if (!isLoggedBleeding && Math.abs(daysUntil) <= 14) nextPill = `${Math.abs(daysUntil)}d late`;
+    }
+
+    if (!anchorEp) {
+      const firstStart = episodes[0].startKey;
+      const before = diffDays(activeKey, firstStart);
+      return {
+        dayNum: '—',
+        phaseTitle: 'Before first logged cycle',
+        phaseSub: `First logged period starts ${formatShortDate(firstStart)} (${before}d later)`,
+        nextPill: '',
+      };
+    }
+
+    const cycleDay = diffDays(anchorEp.startKey, activeKey) + 1;
+    let phaseTitle = 'Follicular phase';
+    let phaseSub = `Cycle started ${formatShortDate(anchorEp.startKey)}`;
+
+    if (isLoggedBleeding || cycleDay <= pl) {
+      phaseTitle = 'Period';
+      phaseSub = isLoggedBleeding
+        ? `Logged ${activeEntry.flow} flow · Day ${cycleDay} of cycle`
+        : `Cycle started ${formatShortDate(anchorEp.startKey)}`;
+    } else if (cycleDay >= ovDay - 4 && cycleDay <= ovDay + 1) {
+      phaseTitle = cycleDay === ovDay ? 'Estimated ovulation' : 'Fertile window';
+      phaseSub = `Around cycle day ${ovDay} · Next est. ${nextStartKey ? formatShortDate(nextStartKey) : '—'}`;
+    } else if (cycleDay > ovDay + 1 && cycleDay <= cl) {
+      phaseTitle = 'Luteal phase';
+      phaseSub = nextStartKey ? `Next period estimated ${formatShortDate(nextStartKey)}` : phaseSub;
+    } else if (cycleDay > cl) {
+      phaseTitle = 'Late / Extended cycle';
+      phaseSub = `Cycle day ${cycleDay} · Typical length ${cl}d`;
+    }
+
+    return {
+      dayNum: String(cycleDay),
+      phaseTitle,
+      phaseSub,
+      nextPill,
+    };
+  }
+
+  /* ------------------------------------------------------------------------
+     App State & DOM
+     ------------------------------------------------------------------------ */
+  const todayInit = startOfToday();
+
   const state = {
+    mode: 'habits', // 'habits' | 'cycle'
+    baseTheme: 'light', // 'light' | 'dark'
     habits: loadHabits(),
     notesByDate: loadNotes(),
-    activeDate: startOfToday(),
+    cycle: loadCycleData(),
+    activeDate: todayInit,
+    cycleDate: todayInit,
+    calYear: todayInit.getFullYear(),
+    calMonth: todayInit.getMonth(),
     search: '',
     status: 'all',
     timeOfDay: 'all',
@@ -229,17 +500,23 @@
     deletedBuffer: null,
     toastTimer: null,
     noteStatusTimer: null,
+    cycleNoteTimer: null,
     deferredInstallPrompt: null,
   };
 
   const els = {
     themeMeta: document.getElementById('theme-color-meta'),
+    cycleModeBtn: document.getElementById('cycle-mode-btn'),
+    heartIcon: document.getElementById('heart-icon'),
     themeToggle: document.getElementById('theme-toggle'),
     themeIcon: document.getElementById('theme-icon'),
     addBtn: document.getElementById('add-habit-btn'),
     installBanner: document.getElementById('android-install-banner'),
     installBtn: document.getElementById('install-app-btn'),
     dismissInstallBtn: document.getElementById('dismiss-install-btn'),
+    habitSheet: document.getElementById('habit-sheet'),
+    cycleSheet: document.getElementById('cycle-sheet'),
+    // Habit sheet elements
     prevDayBtn: document.getElementById('prev-day-btn'),
     nextDayBtn: document.getElementById('next-day-btn'),
     sheetDateHeading: document.getElementById('sheet-date-heading'),
@@ -262,6 +539,36 @@
     resultsSummary: document.getElementById('results-summary'),
     resetFiltersBtn: document.getElementById('reset-filters-btn'),
     sheetRows: document.getElementById('sheet-rows'),
+    // Cycle tracker elements
+    cycleMasthead: document.getElementById('cycle-masthead'),
+    cyclePrevDay: document.getElementById('cycle-prev-day'),
+    cycleNextDay: document.getElementById('cycle-next-day'),
+    cycleDateHeading: document.getElementById('cycle-date-heading'),
+    cycleTodayBadge: document.getElementById('cycle-today-badge'),
+    cycleJumpToday: document.getElementById('cycle-jump-today'),
+    cycleDayNum: document.getElementById('cycle-day-num'),
+    cyclePhaseTitle: document.getElementById('cycle-phase-title'),
+    cyclePhaseSub: document.getElementById('cycle-phase-sub'),
+    cycleNextPill: document.getElementById('cycle-next-pill'),
+    calPrevMonth: document.getElementById('cal-prev-month'),
+    calNextMonth: document.getElementById('cal-next-month'),
+    calMonthTitle: document.getElementById('cal-month-title'),
+    calGrid: document.getElementById('cal-grid'),
+    cycleFlowGrid: document.getElementById('cycle-flow-grid'),
+    cycleFlowStatus: document.getElementById('cycle-flow-status'),
+    cycleSymptomsChips: document.getElementById('cycle-symptoms-chips'),
+    cycleSymptomsCount: document.getElementById('cycle-symptoms-count'),
+    cycleMoodsChips: document.getElementById('cycle-moods-chips'),
+    cycleMoodsCount: document.getElementById('cycle-moods-count'),
+    cycleCareChips: document.getElementById('cycle-care-chips'),
+    cycleCareCount: document.getElementById('cycle-care-count'),
+    cycleNotes: document.getElementById('cycle-notes'),
+    cycleNotesStatus: document.getElementById('cycle-notes-status'),
+    settingCycleLen: document.getElementById('setting-cycle-len'),
+    settingPeriodLen: document.getElementById('setting-period-len'),
+    cycleAvgReadout: document.getElementById('cycle-avg-readout'),
+    cycleHistoryList: document.getElementById('cycle-history-list'),
+    // Footer, Modal, Toast
     exportBtn: document.getElementById('export-btn'),
     importBtn: document.getElementById('import-btn'),
     importFile: document.getElementById('import-file'),
@@ -282,7 +589,68 @@
   };
 
   /* ------------------------------------------------------------------------
-     Filtering & Sorting
+     Mode & Theme Management (Light / Dark / Pink Period Mode)
+     ------------------------------------------------------------------------ */
+  function updateThemeVisuals() {
+    const isCycle = state.mode === 'cycle';
+    const activeTheme = isCycle ? 'pink' : state.baseTheme;
+    document.documentElement.setAttribute('data-theme', activeTheme);
+
+    if (els.themeMeta) {
+      els.themeMeta.setAttribute(
+        'content',
+        activeTheme === 'pink' ? '#fdf0f5' : activeTheme === 'dark' ? '#000000' : '#f4f1ea'
+      );
+    }
+
+    els.cycleModeBtn.classList.toggle('active', isCycle);
+    els.cycleModeBtn.setAttribute('aria-pressed', String(isCycle));
+    els.heartIcon.setAttribute('fill', isCycle ? 'currentColor' : 'none');
+
+    els.habitSheet.hidden = isCycle;
+    els.cycleSheet.hidden = !isCycle;
+    els.addBtn.style.display = isCycle ? 'none' : 'inline-flex';
+    els.resetDemoBtn.textContent = isCycle ? 'Reset cycle logs' : 'Reset sample sheet';
+
+    els.themeIcon.innerHTML =
+      state.baseTheme === 'dark' && !isCycle
+        ? '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>'
+        : '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>';
+  }
+
+  function setMode(nextMode) {
+    state.mode = nextMode === 'cycle' ? 'cycle' : 'habits';
+    try {
+      localStorage.setItem(MODE_KEY, state.mode);
+    } catch {
+      // ignore
+    }
+    updateThemeVisuals();
+    if (state.mode === 'cycle') renderCycle();
+    else renderHabits();
+  }
+
+  function initThemeAndMode() {
+    let savedTheme = null;
+    let savedMode = null;
+    try {
+      savedTheme = localStorage.getItem(THEME_KEY);
+      savedMode = localStorage.getItem(MODE_KEY);
+    } catch {
+      // ignore
+    }
+    if (savedTheme === 'dark' || savedTheme === 'light') {
+      state.baseTheme = savedTheme;
+    } else {
+      const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      state.baseTheme = dark ? 'dark' : 'light';
+    }
+    state.mode = savedMode === 'cycle' ? 'cycle' : 'habits';
+    updateThemeVisuals();
+  }
+
+  /* ------------------------------------------------------------------------
+     Habit Filtering & Rendering
      ------------------------------------------------------------------------ */
   function hasActiveFilters() {
     return (
@@ -327,9 +695,6 @@
     return sorted;
   }
 
-  /* ------------------------------------------------------------------------
-     Rendering
-     ------------------------------------------------------------------------ */
   function renderCategoryPills() {
     const counts = { all: state.habits.length };
     for (const cat of CATEGORIES) counts[cat] = 0;
@@ -357,7 +722,7 @@
     els.notesStatus.classList.remove('saved');
   }
 
-  function render() {
+  function renderHabits() {
     const today = startOfToday();
     const todayKey = toDateKey(today);
     const activeKey = toDateKey(state.activeDate);
@@ -470,7 +835,200 @@
   }
 
   /* ------------------------------------------------------------------------
-     Mutations
+     Cycle Tracker Rendering (Euki & Clue Style)
+     ------------------------------------------------------------------------ */
+  function getCycleEntry(dateKey) {
+    const existing = state.cycle.logs[dateKey];
+    if (existing) return existing;
+    return { flow: null, symptoms: [], moods: [], care: [], note: '' };
+  }
+
+  function mutateCycleEntry(dateKey, mutator) {
+    const entry = {
+      flow: null,
+      symptoms: [],
+      moods: [],
+      care: [],
+      note: '',
+      ...(state.cycle.logs[dateKey] || {}),
+    };
+    entry.symptoms = [...entry.symptoms];
+    entry.moods = [...entry.moods];
+    entry.care = [...entry.care];
+
+    mutator(entry);
+
+    const hasAny =
+      Boolean(entry.flow) ||
+      entry.symptoms.length > 0 ||
+      entry.moods.length > 0 ||
+      entry.care.length > 0 ||
+      entry.note.trim().length > 0;
+
+    if (hasAny) {
+      state.cycle.logs[dateKey] = entry;
+    } else {
+      delete state.cycle.logs[dateKey];
+    }
+    saveCycleData(state.cycle);
+  }
+
+  function renderDroplets(count, outline) {
+    const dropSvg = outline
+      ? '<svg width="12" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>'
+      : '<svg width="12" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>';
+    return Array.from({ length: count }, () => dropSvg).join('');
+  }
+
+  function renderCycleCalendar(todayKey, activeKey, predictions) {
+    const firstOfMonth = new Date(state.calYear, state.calMonth, 1);
+    els.calMonthTitle.textContent = firstOfMonth.toLocaleDateString(undefined, {
+      month: 'long',
+      year: 'numeric',
+    });
+
+    // Monday-first grid offset (0 = Mon ... 6 = Sun)
+    const startOffset = (firstOfMonth.getDay() + 6) % 7;
+    const gridStart = addDays(firstOfMonth, -startOffset);
+
+    const cells = [];
+    for (let i = 0; i < 42; i += 1) {
+      const d = addDays(gridStart, i);
+      const key = toDateKey(d);
+      const outside = d.getMonth() !== state.calMonth;
+      const entry = state.cycle.logs[key];
+      const flowClass = entry && entry.flow ? `flow-${entry.flow}` : '';
+      const isPredicted = predictions.predictedPeriodKeys.has(key);
+      const isFertile = predictions.fertileKeys.has(key);
+      const hasLoggedExtras =
+        entry &&
+        (entry.symptoms.length > 0 || entry.moods.length > 0 || entry.care.length > 0 || entry.note.trim().length > 0);
+
+      const classes = [
+        'cal-day',
+        outside ? 'is-outside' : '',
+        key === todayKey ? 'is-today' : '',
+        key === activeKey ? 'is-selected' : '',
+        flowClass,
+        isPredicted ? 'is-predicted' : '',
+        isFertile ? 'is-fertile' : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
+
+      const dotsHtml =
+        hasLoggedExtras || (isFertile && !flowClass)
+          ? `<span class="cal-dots">
+              ${hasLoggedExtras ? '<span class="cal-dot-sym"></span>' : ''}
+              ${isFertile && !flowClass ? '<span class="cal-dot-fertile"></span>' : ''}
+            </span>`
+          : '';
+
+      cells.push(
+        `<button type="button" class="${classes}" data-cal-date="${key}" aria-label="${d.toDateString()}">
+          <span>${d.getDate()}</span>
+          ${dotsHtml}
+        </button>`
+      );
+    }
+
+    els.calGrid.innerHTML = cells.join('');
+  }
+
+  function renderCycle() {
+    const today = startOfToday();
+    const todayKey = toDateKey(today);
+    const activeKey = toDateKey(state.cycleDate);
+    const isToday = activeKey === todayKey;
+
+    els.cycleDateHeading.textContent = formatSheetDate(state.cycleDate);
+    els.cycleTodayBadge.style.display = isToday ? 'inline-block' : 'none';
+    els.cycleJumpToday.style.display = isToday ? 'none' : 'inline-block';
+
+    const episodes = getPeriodEpisodes(state.cycle);
+    const predictions = computeCyclePredictions(state.cycle, episodes);
+    const status = describeCycleStatus(state.cycle, episodes, activeKey, predictions.nextStartKey);
+
+    els.cycleDayNum.textContent = status.dayNum;
+    els.cyclePhaseTitle.textContent = status.phaseTitle;
+    els.cyclePhaseSub.textContent = status.phaseSub;
+    if (status.nextPill) {
+      els.cycleNextPill.textContent = status.nextPill;
+      els.cycleNextPill.style.display = 'inline-block';
+    } else {
+      els.cycleNextPill.style.display = 'none';
+    }
+
+    renderCycleCalendar(todayKey, activeKey, predictions);
+
+    const entry = getCycleEntry(activeKey);
+
+    // Flow buttons
+    els.cycleFlowStatus.textContent = entry.flow
+      ? `Logged: ${FLOW_OPTIONS.find((f) => f.id === entry.flow)?.label || ''}`
+      : 'Tap to log';
+    els.cycleFlowGrid.innerHTML = FLOW_OPTIONS.map((opt) => {
+      const active = entry.flow === opt.id;
+      return `<button type="button" class="flow-btn ${active ? 'active' : ''}" data-flow="${opt.id}" aria-pressed="${active}">
+        <span class="flow-drops" aria-hidden="true">${renderDroplets(opt.drops, opt.outline)}</span>
+        <span>${opt.label}</span>
+      </button>`;
+    }).join('');
+
+    // Symptom, Mood & Care chip groups
+    const renderChips = (container, countEl, options, selectedList, groupName) => {
+      countEl.textContent = selectedList.length ? `${selectedList.length} selected` : '';
+      container.innerHTML = options
+        .map((label) => {
+          const active = selectedList.includes(label);
+          return `<button type="button" class="track-chip ${active ? 'active' : ''}" data-chip-group="${groupName}" data-chip-val="${escapeHtml(label)}" aria-pressed="${active}">
+            ${escapeHtml(label)}
+          </button>`;
+        })
+        .join('');
+    };
+
+    renderChips(els.cycleSymptomsChips, els.cycleSymptomsCount, BODY_SYMPTOMS, entry.symptoms, 'symptoms');
+    renderChips(els.cycleMoodsChips, els.cycleMoodsCount, MOOD_OPTIONS, entry.moods, 'moods');
+    renderChips(els.cycleCareChips, els.cycleCareCount, CARE_OPTIONS, entry.care, 'care');
+
+    // Cycle notes
+    if (els.cycleNotes.value !== entry.note) {
+      els.cycleNotes.value = entry.note;
+    }
+    els.cycleNotesStatus.textContent = entry.note.trim() ? 'Saved for this day' : 'Saved privately on device';
+    els.cycleNotesStatus.classList.remove('saved');
+
+    // Settings & History
+    els.settingCycleLen.textContent = `${state.cycle.cycleLength}d`;
+    els.settingPeriodLen.textContent = `${state.cycle.periodLength}d`;
+
+    const avgObserved = computeObservedAverageCycle(episodes);
+    els.cycleAvgReadout.textContent = avgObserved ? `Observed avg: ${avgObserved}d` : '';
+
+    if (!episodes.length) {
+      els.cycleHistoryList.innerHTML =
+        '<p class="cycle-empty-history">Your past periods will appear here once you log your first flow day.</p>';
+    } else {
+      const recent = [...episodes].reverse().slice(0, 6);
+      els.cycleHistoryList.innerHTML = recent
+        .map((ep) => {
+          const rangeText =
+            ep.startKey === ep.endKey
+              ? formatShortDate(ep.startKey)
+              : `${formatShortDate(ep.startKey)} – ${formatShortDate(ep.endKey)}`;
+          const cycleMeta = ep.cycleLengthAfter ? `${ep.length}d flow · ${ep.cycleLengthAfter}d cycle` : `${ep.length}d flow`;
+          return `<div class="history-row">
+            <span class="history-dates">${escapeHtml(rangeText)}</span>
+            <span class="history-meta">${escapeHtml(cycleMeta)}</span>
+          </div>`;
+        })
+        .join('');
+    }
+  }
+
+  /* ------------------------------------------------------------------------
+     Habit Mutations
      ------------------------------------------------------------------------ */
   function toggleHabit(habitId) {
     const habit = state.habits.find((h) => h.id === habitId);
@@ -481,7 +1039,7 @@
     else habit.completions.push(key);
     hapticTick(12);
     saveHabits(state.habits);
-    render();
+    renderHabits();
   }
 
   function deleteHabit(habitId) {
@@ -490,7 +1048,7 @@
     const [removed] = state.habits.splice(index, 1);
     state.deletedBuffer = { habit: removed, index };
     saveHabits(state.habits);
-    render();
+    renderHabits();
     showToast(`Removed "${removed.name}"`, true);
   }
 
@@ -501,7 +1059,7 @@
     state.deletedBuffer = null;
     saveHabits(state.habits);
     hideToast();
-    render();
+    renderHabits();
   }
 
   function clearAllFilters() {
@@ -514,7 +1072,7 @@
     els.statusFilter.querySelectorAll('.seg-btn').forEach((b) => {
       b.classList.toggle('active', b.dataset.status === 'all');
     });
-    render();
+    renderHabits();
   }
 
   /* ------------------------------------------------------------------------
@@ -557,40 +1115,7 @@
   }
 
   /* ------------------------------------------------------------------------
-     Theme (Syncs Android Status & Navigation Bar theme-color Dynamically)
-     ------------------------------------------------------------------------ */
-  function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    if (els.themeMeta) {
-      els.themeMeta.setAttribute('content', theme === 'dark' ? '#000000' : '#f4f1ea');
-    }
-    try {
-      localStorage.setItem(THEME_KEY, theme);
-    } catch {
-      // ignore
-    }
-    els.themeIcon.innerHTML =
-      theme === 'dark'
-        ? '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>'
-        : '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>';
-  }
-
-  function initTheme() {
-    let saved = null;
-    try {
-      saved = localStorage.getItem(THEME_KEY);
-    } catch {
-      // ignore
-    }
-    if (saved === 'dark' || saved === 'light') applyTheme(saved);
-    else {
-      const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      applyTheme(dark ? 'dark' : 'light');
-    }
-  }
-
-  /* ------------------------------------------------------------------------
-     Android Native WebAPK Install Flow (Chrome / Samsung Internet)
+     Android Native WebAPK Install Flow
      ------------------------------------------------------------------------ */
   function initAndroidInstallPrompt() {
     if (!els.installBanner || !els.installBtn || !els.dismissInstallBtn) return;
@@ -604,9 +1129,7 @@
       } catch {
         // ignore
       }
-      if (!dismissed) {
-        els.installBanner.hidden = false;
-      }
+      if (!dismissed) els.installBanner.hidden = false;
     });
 
     els.installBtn.addEventListener('click', async () => {
@@ -638,78 +1161,107 @@
   }
 
   /* ------------------------------------------------------------------------
-     Event Wiring
+     Swipe Helper
      ------------------------------------------------------------------------ */
-  els.themeToggle.addEventListener('click', () => {
-    const current = document.documentElement.getAttribute('data-theme');
-    applyTheme(current === 'dark' ? 'light' : 'dark');
+  function attachHorizontalSwipe(el, onSwipeRight, onSwipeLeft) {
+    if (!el) return;
+    let startX = null;
+    let startY = null;
+    el.addEventListener(
+      'touchstart',
+      (e) => {
+        if (e.touches.length !== 1) return;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+      },
+      { passive: true }
+    );
+    el.addEventListener(
+      'touchend',
+      (e) => {
+        if (startX === null || e.changedTouches.length !== 1) return;
+        const dx = e.changedTouches[0].clientX - startX;
+        const dy = e.changedTouches[0].clientY - startY;
+        startX = null;
+        startY = null;
+        if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+        if (dx > 0) onSwipeRight();
+        else onSwipeLeft();
+      },
+      { passive: true }
+    );
+  }
+
+  /* ------------------------------------------------------------------------
+     Event Wiring — Top Bar (Heart Button & Theme Toggle)
+     ------------------------------------------------------------------------ */
+  els.cycleModeBtn.addEventListener('click', () => {
+    hapticTick(12);
+    setMode(state.mode === 'cycle' ? 'habits' : 'cycle');
   });
 
+  els.themeToggle.addEventListener('click', () => {
+    hapticTick(8);
+    if (state.mode === 'cycle') {
+      // Pressing dark/light button returns from pink cycle mode to dark/light habit mode
+      state.baseTheme = state.baseTheme === 'dark' ? 'light' : 'dark';
+      try {
+        localStorage.setItem(THEME_KEY, state.baseTheme);
+      } catch {
+        // ignore
+      }
+      setMode('habits');
+      return;
+    }
+    state.baseTheme = state.baseTheme === 'dark' ? 'light' : 'dark';
+    try {
+      localStorage.setItem(THEME_KEY, state.baseTheme);
+    } catch {
+      // ignore
+    }
+    updateThemeVisuals();
+  });
+
+  /* ------------------------------------------------------------------------
+     Event Wiring — Habit Sheet
+     ------------------------------------------------------------------------ */
   els.prevDayBtn.addEventListener('click', () => {
     hapticTick(8);
     state.activeDate = addDays(state.activeDate, -1);
-    render();
+    renderHabits();
   });
 
   els.nextDayBtn.addEventListener('click', () => {
-    const today = startOfToday();
     const next = addDays(state.activeDate, 1);
-    if (next <= today) {
+    if (next <= startOfToday()) {
       hapticTick(8);
       state.activeDate = next;
-      render();
+      renderHabits();
     }
   });
 
   els.jumpTodayBtn.addEventListener('click', () => {
     hapticTick(8);
     state.activeDate = startOfToday();
-    render();
+    renderHabits();
   });
 
-  // One-handed swipe left/right on masthead to flip days on Galaxy S25 Ultra
-  const mastheadEl = document.querySelector('.sheet-masthead');
-  if (mastheadEl) {
-    let touchStartX = null;
-    let touchStartY = null;
-    mastheadEl.addEventListener(
-      'touchstart',
-      (e) => {
-        if (e.touches.length !== 1) return;
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-      },
-      { passive: true }
-    );
-    mastheadEl.addEventListener(
-      'touchend',
-      (e) => {
-        if (touchStartX === null || e.changedTouches.length !== 1) return;
-        const dx = e.changedTouches[0].clientX - touchStartX;
-        const dy = e.changedTouches[0].clientY - touchStartY;
-        touchStartX = null;
-        touchStartY = null;
-        if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
-        if (dx > 0) {
-          hapticTick(8);
-          state.activeDate = addDays(state.activeDate, -1);
-          render();
-        } else {
-          const next = addDays(state.activeDate, 1);
-          if (next <= startOfToday()) {
-            hapticTick(8);
-            state.activeDate = next;
-            render();
-          }
-        }
-      },
-      { passive: true }
-    );
-  }
-
-  window.addEventListener('resize', () => {
-    els.sheetDateHeading.textContent = formatSheetDate(state.activeDate);
-  });
+  attachHorizontalSwipe(
+    els.habitSheet.querySelector('.sheet-masthead'),
+    () => {
+      hapticTick(8);
+      state.activeDate = addDays(state.activeDate, -1);
+      renderHabits();
+    },
+    () => {
+      const next = addDays(state.activeDate, 1);
+      if (next <= startOfToday()) {
+        hapticTick(8);
+        state.activeDate = next;
+        renderHabits();
+      }
+    }
+  );
 
   els.dailyNotes.addEventListener('input', (e) => {
     const activeKey = toDateKey(state.activeDate);
@@ -759,19 +1311,19 @@
 
     saveHabits(state.habits);
     closeModal();
-    render();
+    renderHabits();
   });
 
   els.searchInput.addEventListener('input', (e) => {
     state.search = e.target.value;
-    render();
+    renderHabits();
   });
 
   els.searchClear.addEventListener('click', () => {
     state.search = '';
     els.searchInput.value = '';
     els.searchInput.focus();
-    render();
+    renderHabits();
   });
 
   els.statusFilter.addEventListener('click', (e) => {
@@ -779,24 +1331,24 @@
     if (!btn) return;
     state.status = btn.dataset.status;
     els.statusFilter.querySelectorAll('.seg-btn').forEach((b) => b.classList.toggle('active', b === btn));
-    render();
+    renderHabits();
   });
 
   els.categoryPills.addEventListener('click', (e) => {
     const btn = e.target.closest('.pill-btn');
     if (!btn) return;
     state.category = btn.dataset.category;
-    render();
+    renderHabits();
   });
 
   els.timeFilter.addEventListener('change', (e) => {
     state.timeOfDay = e.target.value;
-    render();
+    renderHabits();
   });
 
   els.sortSelect.addEventListener('change', (e) => {
     state.sort = e.target.value;
-    render();
+    renderHabits();
   });
 
   els.resetFiltersBtn.addEventListener('click', clearAllFilters);
@@ -813,21 +1365,144 @@
     else if (action === 'clear-filters') clearAllFilters();
   });
 
+  /* ------------------------------------------------------------------------
+     Event Wiring — Cycle Period Tracker (Euki & Clue Style)
+     ------------------------------------------------------------------------ */
+  function setCycleDate(nextDate) {
+    state.cycleDate = nextDate;
+    state.calYear = nextDate.getFullYear();
+    state.calMonth = nextDate.getMonth();
+    renderCycle();
+  }
+
+  els.cyclePrevDay.addEventListener('click', () => {
+    hapticTick(8);
+    setCycleDate(addDays(state.cycleDate, -1));
+  });
+
+  els.cycleNextDay.addEventListener('click', () => {
+    hapticTick(8);
+    setCycleDate(addDays(state.cycleDate, 1));
+  });
+
+  els.cycleJumpToday.addEventListener('click', () => {
+    hapticTick(8);
+    setCycleDate(startOfToday());
+  });
+
+  attachHorizontalSwipe(
+    els.cycleMasthead,
+    () => {
+      hapticTick(8);
+      setCycleDate(addDays(state.cycleDate, -1));
+    },
+    () => {
+      hapticTick(8);
+      setCycleDate(addDays(state.cycleDate, 1));
+    }
+  );
+
+  els.calPrevMonth.addEventListener('click', () => {
+    hapticTick(6);
+    const prev = new Date(state.calYear, state.calMonth - 1, 1);
+    state.calYear = prev.getFullYear();
+    state.calMonth = prev.getMonth();
+    renderCycle();
+  });
+
+  els.calNextMonth.addEventListener('click', () => {
+    hapticTick(6);
+    const next = new Date(state.calYear, state.calMonth + 1, 1);
+    state.calYear = next.getFullYear();
+    state.calMonth = next.getMonth();
+    renderCycle();
+  });
+
+  els.calGrid.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-cal-date]');
+    if (!btn) return;
+    hapticTick(8);
+    setCycleDate(parseDateKey(btn.dataset.calDate));
+  });
+
+  els.cycleFlowGrid.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-flow]');
+    if (!btn) return;
+    const flowId = btn.dataset.flow;
+    const key = toDateKey(state.cycleDate);
+    hapticTick(12);
+    mutateCycleEntry(key, (entry) => {
+      entry.flow = entry.flow === flowId ? null : flowId;
+    });
+    renderCycle();
+  });
+
+  els.cycleSheet.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-chip-group]');
+    if (chip) {
+      const group = chip.dataset.chipGroup;
+      const val = chip.dataset.chipVal;
+      const key = toDateKey(state.cycleDate);
+      hapticTick(8);
+      mutateCycleEntry(key, (entry) => {
+        const list = entry[group];
+        const idx = list.indexOf(val);
+        if (idx >= 0) list.splice(idx, 1);
+        else list.push(val);
+      });
+      renderCycle();
+      return;
+    }
+
+    const stepper = e.target.closest('[data-cycle-step]');
+    if (stepper) {
+      const [field, deltaStr] = stepper.dataset.cycleStep.split(':');
+      const delta = Number(deltaStr);
+      hapticTick(6);
+      if (field === 'cycle') {
+        state.cycle.cycleLength = Math.min(45, Math.max(21, state.cycle.cycleLength + delta));
+      } else if (field === 'period') {
+        state.cycle.periodLength = Math.min(10, Math.max(2, state.cycle.periodLength + delta));
+      }
+      saveCycleData(state.cycle);
+      renderCycle();
+    }
+  });
+
+  els.cycleNotes.addEventListener('input', (e) => {
+    const key = toDateKey(state.cycleDate);
+    const val = e.target.value;
+    mutateCycleEntry(key, (entry) => {
+      entry.note = val;
+    });
+    els.cycleNotesStatus.textContent = 'Saved';
+    els.cycleNotesStatus.classList.add('saved');
+    clearTimeout(state.cycleNoteTimer);
+    state.cycleNoteTimer = setTimeout(() => {
+      els.cycleNotesStatus.textContent = val.trim() ? 'Saved for this day' : 'Saved privately on device';
+      els.cycleNotesStatus.classList.remove('saved');
+    }, 1200);
+  });
+
+  /* ------------------------------------------------------------------------
+     Shared Utilities (Export / Import / Reset / Resize / Keyboard)
+     ------------------------------------------------------------------------ */
   els.toastAction.addEventListener('click', undoDelete);
 
   els.exportBtn.addEventListener('click', () => {
     const payload = {
       habits: state.habits,
       notesByDate: state.notesByDate,
+      cycle: state.cycle,
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `candace-s25-${toDateKey(startOfToday())}.json`;
+    a.download = `candace-backup-${toDateKey(startOfToday())}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('Exported habits & notes');
+    showToast('Exported habits, notes & cycle data');
   });
 
   els.importBtn.addEventListener('click', () => els.importFile.click());
@@ -839,16 +1514,21 @@
       try {
         const parsed = JSON.parse(String(reader.result));
         const rawHabits = Array.isArray(parsed) ? parsed : parsed && Array.isArray(parsed.habits) ? parsed.habits : null;
-        if (!rawHabits) throw new Error('Invalid format');
-        const cleaned = rawHabits.map(normalizeHabit).filter(Boolean);
-        state.habits = cleaned;
+        if (rawHabits) {
+          state.habits = rawHabits.map(normalizeHabit).filter(Boolean);
+          saveHabits(state.habits);
+        }
         if (parsed && parsed.notesByDate && typeof parsed.notesByDate === 'object' && !Array.isArray(parsed.notesByDate)) {
           state.notesByDate = parsed.notesByDate;
           saveNotes(state.notesByDate);
         }
-        saveHabits(state.habits);
+        if (parsed && parsed.cycle && typeof parsed.cycle === 'object') {
+          state.cycle = normalizeCycleData(parsed.cycle);
+          saveCycleData(state.cycle);
+        }
         clearAllFilters();
-        showToast(`Imported ${cleaned.length} daily habits`);
+        renderCycle();
+        showToast('Imported Candace backup');
       } catch {
         showToast('Could not import file — invalid JSON');
       } finally {
@@ -859,18 +1539,33 @@
   });
 
   els.resetDemoBtn.addEventListener('click', () => {
-    state.habits = buildSampleHabits();
-    state.notesByDate = {};
-    state.activeDate = startOfToday();
-    saveHabits(state.habits);
-    saveNotes(state.notesByDate);
-    clearAllFilters();
-    showToast('Reset to blank sample sheet');
+    if (state.mode === 'cycle') {
+      state.cycle = defaultCycleData();
+      state.cycleDate = startOfToday();
+      state.calYear = state.cycleDate.getFullYear();
+      state.calMonth = state.cycleDate.getMonth();
+      saveCycleData(state.cycle);
+      renderCycle();
+      showToast('Cleared all cycle logs');
+    } else {
+      state.habits = buildSampleHabits();
+      state.notesByDate = {};
+      state.activeDate = startOfToday();
+      saveHabits(state.habits);
+      saveNotes(state.notesByDate);
+      clearAllFilters();
+      showToast('Reset to blank sample sheet');
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    els.sheetDateHeading.textContent = formatSheetDate(state.activeDate);
+    els.cycleDateHeading.textContent = formatSheetDate(state.cycleDate);
   });
 
   document.addEventListener('keydown', (e) => {
     const inField = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
-    if (e.key === '/' && !inField && !els.modal.classList.contains('open')) {
+    if (state.mode === 'habits' && e.key === '/' && !inField && !els.modal.classList.contains('open')) {
       e.preventDefault();
       els.searchInput.focus();
     } else if (e.key === 'Escape') {
@@ -878,7 +1573,7 @@
       else if (document.activeElement === els.searchInput && state.search) {
         state.search = '';
         els.searchInput.value = '';
-        render();
+        renderHabits();
       }
     }
   });
@@ -896,8 +1591,9 @@
     }
   }
 
-  initTheme();
+  initThemeAndMode();
   initAndroidInstallPrompt();
-  render();
+  renderHabits();
+  renderCycle();
   registerOfflineWorker();
 })();

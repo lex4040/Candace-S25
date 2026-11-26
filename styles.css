@@ -88,6 +88,45 @@
   --shadow-lg: 0 20px 46px rgba(0, 0, 0, 0.56);
 }
 
+/* Light Pink & White Theme (Menstrual Cycle Tracker Mode) */
+[data-theme="pink"] {
+  --bg: #fdf0f5;
+  --sheet: #ffffff;
+  --sheet-header: #fff6fa;
+  --sheet-row-hover: #fff8fb;
+  --sheet-done-row: #fffafd;
+  --rule: #f3d5e1;
+  --rule-strong: #e7b8cb;
+
+  --ink: #381d29;
+  --ink-secondary: #754c5e;
+  --ink-muted: #a07688;
+
+  --accent: #d94f82;
+  --accent-hover: #c33d6f;
+  --accent-soft: #fce3ed;
+  --accent-ink: #ffffff;
+
+  --streak: #c94676;
+  --streak-soft: #fde7f0;
+
+  --danger: #c43c56;
+  --danger-soft: #fde8ec;
+
+  --highlight-bg: #ffd6e6;
+  --highlight-ink: #381d29;
+
+  --cycle-spotting: #f4b6cc;
+  --cycle-light: #f08cb0;
+  --cycle-medium: #de5b8b;
+  --cycle-heavy: #b92d61;
+  --cycle-fertile: #a779c8;
+  --cycle-fertile-soft: #f3eafb;
+
+  --shadow-sheet: 0 2px 8px rgba(180, 62, 108, 0.06), 0 12px 30px rgba(180, 62, 108, 0.08);
+  --shadow-lg: 0 18px 42px rgba(130, 38, 76, 0.18);
+}
+
 *,
 *::before,
 *::after {
@@ -240,13 +279,15 @@ mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 6px;
   height: 38px;
-  padding: 0 14px;
+  padding: 0 13px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;
-  font-size: 0.86rem;
+  font-size: 0.85rem;
   font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: background-color 0.14s var(--ease), border-color 0.14s var(--ease),
     transform 0.1s var(--ease), color 0.14s var(--ease);
 }
@@ -1087,10 +1128,24 @@ mark {
 
   .top-bar {
     margin-bottom: 14px;
+    gap: 8px;
+  }
+
+  .top-actions {
+    gap: 6px;
   }
 
   .app-title {
-    font-size: 1.55rem;
+    font-size: 1.4rem;
+  }
+
+  .btn {
+    padding: 0 11px;
+    font-size: 0.82rem;
+  }
+
+  .btn-icon {
+    padding: 0;
   }
 
   .app-tagline {
@@ -1167,4 +1222,467 @@ mark {
     width: 40px;
     height: 40px;
   }
+}
+
+/* ==========================================================================
+   Heart Toggle Button & Euki/Clue-Style Menstrual Period Tracker
+   ========================================================================== */
+.btn-heart {
+  color: #d94f82;
+}
+
+.btn-heart.active {
+  background-color: #d94f82;
+  border-color: #d94f82;
+  color: #ffffff;
+}
+
+.daily-sheet[hidden] {
+  display: none;
+}
+
+/* Cycle Summary Banner */
+.cycle-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background-color: var(--sheet);
+  border: 1px solid var(--rule);
+}
+
+.cycle-hero-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cycle-ring {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: 2.5px solid var(--accent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1.05;
+}
+
+.cycle-ring-num {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.cycle-ring-sub {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-secondary);
+}
+
+.cycle-phase-title {
+  margin: 0;
+  font-size: 0.96rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.cycle-phase-sub {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  color: var(--ink-secondary);
+}
+
+.cycle-predict-pill {
+  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  background-color: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Monthly Calendar Section */
+.cycle-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--rule);
+  background-color: var(--sheet);
+}
+
+.cycle-section:last-child {
+  border-bottom: none;
+}
+
+.cycle-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.cycle-section-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+}
+
+.cal-month-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cal-nav-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  border: 1px solid var(--rule);
+  background-color: var(--sheet-header);
+  color: var(--ink-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cal-month-title {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--ink);
+  min-width: 112px;
+  text-align: center;
+}
+
+.cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 6px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.cal-day {
+  position: relative;
+  height: 38px;
+  border-radius: 11px;
+  border: 1.5px solid transparent;
+  background-color: transparent;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: transform 0.1s var(--ease), border-color 0.14s var(--ease), background-color 0.14s var(--ease);
+}
+
+.cal-day:active {
+  transform: scale(0.94);
+}
+
+.cal-day.is-outside {
+  opacity: 0.28;
+}
+
+.cal-day.is-today {
+  font-weight: 700;
+  border-color: var(--rule-strong);
+}
+
+.cal-day.is-selected {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+  font-weight: 700;
+}
+
+.cal-day.flow-spotting {
+  background-color: #fdeaf1;
+  color: var(--ink);
+}
+
+.cal-day.flow-light {
+  background-color: var(--cycle-light);
+  color: #ffffff;
+}
+
+.cal-day.flow-medium {
+  background-color: var(--cycle-medium);
+  color: #ffffff;
+}
+
+.cal-day.flow-heavy {
+  background-color: var(--cycle-heavy);
+  color: #ffffff;
+}
+
+.cal-day.is-predicted:not(.flow-light):not(.flow-medium):not(.flow-heavy) {
+  border: 1.5px dashed var(--accent);
+  background-color: var(--sheet-header);
+}
+
+.cal-day.is-fertile:not(.flow-light):not(.flow-medium):not(.flow-heavy):not(.is-predicted) {
+  background-color: var(--cycle-fertile-soft);
+  color: #5b3878;
+}
+
+.cal-dots {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  position: absolute;
+  bottom: 3px;
+}
+
+.cal-dot-sym {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--accent);
+}
+
+.cal-day.flow-light .cal-dot-sym,
+.cal-day.flow-medium .cal-dot-sym,
+.cal-day.flow-heavy .cal-dot-sym {
+  background-color: #ffffff;
+}
+
+.cal-dot-fertile {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--cycle-fertile);
+}
+
+.cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.legend-swatch.period {
+  background-color: var(--accent);
+}
+
+.legend-swatch.predicted {
+  border: 1.5px dashed var(--accent);
+  background-color: var(--sheet-header);
+}
+
+.legend-swatch.fertile {
+  background-color: var(--cycle-fertile-soft);
+  border: 1px solid var(--cycle-fertile);
+}
+
+/* Flow & Euki/Clue Tracking Chips */
+.flow-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.flow-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 58px;
+  padding: 8px 6px;
+  border-radius: 14px;
+  border: 1.5px solid var(--rule);
+  background-color: var(--sheet-header);
+  color: var(--ink-secondary);
+  font-size: 0.76rem;
+  font-weight: 600;
+  transition: all 0.14s var(--ease);
+}
+
+.flow-btn:active {
+  transform: scale(0.96);
+}
+
+.flow-drops {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--accent);
+}
+
+.flow-btn.active {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.flow-btn.active .flow-drops {
+  color: #ffffff;
+}
+
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.track-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--rule);
+  background-color: var(--sheet-header);
+  color: var(--ink-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.14s var(--ease);
+}
+
+.track-chip:active {
+  transform: scale(0.96);
+}
+
+.track-chip.active {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* Cycle Settings & History */
+.cycle-settings-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.stepper-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  background-color: var(--sheet-header);
+  border: 1px solid var(--rule);
+}
+
+.stepper-meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.stepper-label {
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+}
+
+.stepper-val {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.stepper-btns {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.stepper-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--rule);
+  background-color: var(--sheet);
+  color: var(--ink);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cycle-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background-color: var(--sheet-header);
+  border: 1px solid var(--rule);
+  font-size: 0.8rem;
+}
+
+.history-dates {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.history-meta {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.cycle-empty-history {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+  text-align: center;
+  padding: 10px 6px;
 }

@@ -27,6 +27,18 @@
       </div>
       <div class="top-actions">
         <button
+          id="cycle-mode-btn"
+          type="button"
+          class="btn btn-ghost btn-icon btn-heart"
+          aria-label="Switch to Period Tracker (light pink theme)"
+          aria-pressed="false"
+          title="Period Tracker"
+        >
+          <svg id="heart-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+          </svg>
+        </button>
+        <button
           id="theme-toggle"
           type="button"
           class="btn btn-ghost btn-icon"
@@ -55,8 +67,8 @@
       </div>
     </aside>
 
-    <!-- Unified Daily Sheet -->
-    <main class="daily-sheet" aria-label="Daily habit sheet">
+    <!-- Unified Daily Habit Sheet -->
+    <main id="habit-sheet" class="daily-sheet" aria-label="Daily habit sheet">
       <!-- Sheet Masthead: Swipeable Date Switcher + Daily Progress -->
       <section class="sheet-masthead" aria-label="Active day sheet header">
         <div class="masthead-top">
@@ -176,6 +188,159 @@
 
       <!-- Ruled Sheet Rows -->
       <div id="sheet-rows" class="sheet-rows"></div>
+    </main>
+
+    <!-- Menstrual Period Tracker Sheet (Euki & Clue Style — Light Pink & White) -->
+    <main id="cycle-sheet" class="daily-sheet cycle-sheet" hidden aria-label="Menstrual period tracker">
+      <!-- Cycle Day Switcher & Status Hero -->
+      <section id="cycle-masthead" class="sheet-masthead" aria-label="Cycle day header">
+        <div class="day-switcher">
+          <button id="cycle-prev-day" type="button" class="nav-day-btn" aria-label="Previous day">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+          </button>
+          <div class="day-heading-wrap">
+            <h2 id="cycle-date-heading" class="day-heading">Today</h2>
+            <span id="cycle-today-badge" class="today-badge">Today</span>
+            <button id="cycle-jump-today" type="button" class="jump-today-btn" style="display: none;">Today</button>
+          </div>
+          <button id="cycle-next-day" type="button" class="nav-day-btn" aria-label="Next day">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m9 18 6-6-6-6" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="cycle-hero">
+          <div class="cycle-hero-left">
+            <div class="cycle-ring">
+              <span id="cycle-day-num" class="cycle-ring-num">&mdash;</span>
+              <span class="cycle-ring-sub">Day</span>
+            </div>
+            <div>
+              <p id="cycle-phase-title" class="cycle-phase-title">No period logged yet</p>
+              <p id="cycle-phase-sub" class="cycle-phase-sub">Tap a flow level below to start tracking</p>
+            </div>
+          </div>
+          <span id="cycle-next-pill" class="cycle-predict-pill" style="display: none;"></span>
+        </div>
+      </section>
+
+      <!-- Interactive Monthly Cycle Calendar -->
+      <section class="cycle-section" aria-label="Cycle calendar">
+        <div class="cycle-section-head">
+          <span class="cycle-section-label">Cycle Calendar</span>
+          <div class="cal-month-nav">
+            <button id="cal-prev-month" type="button" class="cal-nav-btn" aria-label="Previous month">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+            <span id="cal-month-title" class="cal-month-title">Month</span>
+            <button id="cal-next-month" type="button" class="cal-nav-btn" aria-label="Next month">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="cal-weekdays" aria-hidden="true">
+          <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+        </div>
+        <div id="cal-grid" class="cal-grid" role="grid" aria-label="Month days"></div>
+
+        <div class="cal-legend">
+          <span class="legend-item"><span class="legend-swatch period"></span>Period</span>
+          <span class="legend-item"><span class="legend-swatch predicted"></span>Predicted</span>
+          <span class="legend-item"><span class="legend-swatch fertile"></span>Fertile window</span>
+        </div>
+      </section>
+
+      <!-- Bleeding / Period Flow (Clue & Euki Style) -->
+      <section class="cycle-section" aria-label="Period bleeding flow">
+        <div class="cycle-section-head">
+          <span class="cycle-section-label">Bleeding &amp; Flow</span>
+          <span id="cycle-flow-status" class="notes-status">Tap to log</span>
+        </div>
+        <div id="cycle-flow-grid" class="flow-grid" role="group" aria-label="Bleeding intensity"></div>
+      </section>
+
+      <!-- Pain & Body Symptoms -->
+      <section class="cycle-section" aria-label="Pain and body symptoms">
+        <div class="cycle-section-head">
+          <span class="cycle-section-label">Pain &amp; Body</span>
+          <span id="cycle-symptoms-count" class="notes-status"></span>
+        </div>
+        <div id="cycle-symptoms-chips" class="chip-group" role="group" aria-label="Body symptoms"></div>
+      </section>
+
+      <!-- Mood & Emotions -->
+      <section class="cycle-section" aria-label="Mood and emotions">
+        <div class="cycle-section-head">
+          <span class="cycle-section-label">Mood &amp; Emotions</span>
+          <span id="cycle-moods-count" class="notes-status"></span>
+        </div>
+        <div id="cycle-moods-chips" class="chip-group" role="group" aria-label="Moods"></div>
+      </section>
+
+      <!-- Energy & Self-Care -->
+      <section class="cycle-section" aria-label="Energy and self-care">
+        <div class="cycle-section-head">
+          <span class="cycle-section-label">Energy &amp; Care</span>
+          <span id="cycle-care-count" class="notes-status"></span>
+        </div>
+        <div id="cycle-care-chips" class="chip-group" role="group" aria-label="Energy and self-care"></div>
+      </section>
+
+      <!-- Private Daily Cycle Notes -->
+      <section class="cycle-section" aria-label="Cycle daily notes">
+        <div class="notes-header">
+          <label for="cycle-notes" class="notes-label">Cycle Notes</label>
+          <span id="cycle-notes-status" class="notes-status" aria-live="polite">Saved privately on device</span>
+        </div>
+        <textarea
+          id="cycle-notes"
+          class="notes-textarea"
+          rows="2"
+          placeholder="Notes on cramps, sleep, cravings, medications, or how you feel..."
+        ></textarea>
+      </section>
+
+      <!-- Cycle Settings & Recent Cycles History -->
+      <section class="cycle-section" aria-label="Cycle settings and history">
+        <div class="cycle-section-head">
+          <span class="cycle-section-label">Cycle Settings &amp; History</span>
+          <span id="cycle-avg-readout" class="notes-status"></span>
+        </div>
+
+        <div class="cycle-settings-row">
+          <div class="stepper-card">
+            <div class="stepper-meta">
+              <span class="stepper-label">Cycle length</span>
+              <span id="setting-cycle-len" class="stepper-val">28d</span>
+            </div>
+            <div class="stepper-btns">
+              <button type="button" class="stepper-btn" data-cycle-step="cycle:-1" aria-label="Decrease cycle length">&minus;</button>
+              <button type="button" class="stepper-btn" data-cycle-step="cycle:1" aria-label="Increase cycle length">+</button>
+            </div>
+          </div>
+
+          <div class="stepper-card">
+            <div class="stepper-meta">
+              <span class="stepper-label">Period length</span>
+              <span id="setting-period-len" class="stepper-val">5d</span>
+            </div>
+            <div class="stepper-btns">
+              <button type="button" class="stepper-btn" data-cycle-step="period:-1" aria-label="Decrease period length">&minus;</button>
+              <button type="button" class="stepper-btn" data-cycle-step="period:1" aria-label="Increase period length">+</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="cycle-history-list" class="cycle-history-list"></div>
+      </section>
     </main>
 
     <!-- Footer -->

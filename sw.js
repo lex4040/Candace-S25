@@ -4,7 +4,7 @@
    icons so the installed Android WebAPK works 100% offline in Airplane Mode.
    ========================================================================== */
 
-const CACHE_NAME = 'candace-s25-offline-v2';
+const CACHE_NAME = 'candace-s25-offline-v4';
 const ASSETS = [
   './',
   './index.html',
